@@ -1,42 +1,29 @@
 from imutils.object_detection import non_max_suppression
 import numpy as np
-
 import cv2
 import os
-from scipy.spatial import KDTree
 from sklearn.cluster import DBSCAN
 from collections import defaultdict
 
 
+class BoundingBoxes:
+    def __init__(self):
+        self.raw_box = None
+        self.clusters_boxes = defaultdict(list)
+        self.depleted_regions = list()
+        self.single_regions = list()
+
+
 class TextLocation:
 
-    def __init__(self, img_path: str, model_path: str):
+
+    def __init__(self, model_path: str):
+
+        self.boxes = BoundingBoxes()
         self._image_to_net = None
         self.img = None
-        self.img_path = img_path
         self.model_path = model_path
         self.net = None
-        self._min_confidence = 0.1
-        self._boxes = list
-        self._boxes_sorted = defaultdict(list)
-
-    def load_img(self):
-        # load the input image and grab the image dimensions
-        image = cv2.imread(self.img_path)
-        self.img = image.copy()
-        (self.__H, self.__W) = image.shape[:2]
-        newW = (self.__W // 32) * 32  # resized image width (should be multiple of 32)
-        newH = (self.__H // 32) * 32  # resized image height (should be multiple of 32)
-        # set the new width and height and then determine the ratio in change
-        # for both the width and height
-        self.__rW = self.__W / float(newW)
-        self.__rH = self.__H / float(newH)
-
-        # resize the image and grab the new image dimensions
-        self._image_to_net = cv2.resize(image, (newW, newH))
-        (self.__H, self.__W) = self._image_to_net.shape[:2]
-
-        return
 
     def model_initialization(self):
         # load the pre-trained EAST text detector
@@ -45,7 +32,27 @@ class TextLocation:
         # construct a blob from the image and then perform a forward pass of
         # the model to obtain the two output layer sets
 
-    def loading_the_image_into_the_model(self):
+    def _load_img(self, img_path: str):
+        self.__rW = None
+        self.__rH = None
+        # load the input image and grab the image dimensions
+        image = cv2.imread(img_path)
+        self.img = image.copy()
+
+        (H, W) = image.shape[:2]
+        newW = (W // 32) * 32  # resized image width (should be multiple of 32)
+        newH = (H // 32) * 32  # resized image height (should be multiple of 32)
+        # set the new width and height and then determine the ratio in change
+        # for both the width and height
+        self.__rW = W / float(newW)
+        self.__rH = H / float(newH)
+
+        # resize the image and grab the new image dimensions
+        self._image_to_net = cv2.resize(image, (newW, newH))
+
+        (self.__H, self.__W) = self._image_to_net.shape[:2]
+
+    def _loading_the_image_into_the_model(self):
         # define the two output layer names for the EAST detector model that
         # we are interested -- the first is the output probabilities and the
         # second can be used to derive the bounding box coordinates of text
@@ -57,6 +64,9 @@ class TextLocation:
                                      (123.68, 116.78, 103.94), swapRB=True, crop=False)
         self.net.setInput(blob)
         (scores, geometry) = self.net.forward(layerNames)
+        return scores, geometry
+
+    def _results_processing(self, scores, geometry, min_confidence: float):
 
         (numRows, numCols) = scores.shape[2:4]
         rects = []
@@ -77,7 +87,7 @@ class TextLocation:
             # loop over the number of columns
             for x in range(0, numCols):
                 # if our score does not have sufficient probability, ignore it
-                if scoresData[x] < self._min_confidence:
+                if scoresData[x] < min_confidence:
                     continue
 
                 # compute the offset factor as our resulting feature maps will
@@ -110,7 +120,9 @@ class TextLocation:
         # apply non-maxima suppression to suppress weak, overlapping bounding
         # boxes
         self._boxes_from_net = non_max_suppression(np.array(rects), probs=confidences)
-        self._boxes = np.empty_like(self._boxes_from_net)
+
+    def _return_to_home_coordinates(self):
+        self.boxes.raw_box = np.empty_like(self._boxes_from_net)
         counter = 0
         for (startX, startY, endX, endY) in self._boxes_from_net:
             startX = int(startX * self.__rW)
@@ -118,40 +130,90 @@ class TextLocation:
             endX = int(endX * self.__rW)
             endY = int(endY * self.__rH)
 
-            self._boxes[counter] = (startX, startY, endX, endY)
+            self.boxes.raw_box[counter] = (startX, startY, endX, endY)
             counter += 1
 
-        clustered = DBSCAN(eps=100, min_samples=3).fit_predict(self._boxes)
+    def _clustering_box(self, eps: int, min_samples: int, ):
+        clustered = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(self.boxes.raw_box)
 
-        for x in range(len(self._boxes)):
+        for x in range(len(self.boxes.raw_box)):
             _class = clustered[x]
-            value = self._boxes[x]
-            self._boxes_sorted[_class].append(value)
+            value = self.boxes.raw_box[x]
+            self.boxes.clusters_boxes[_class].append(value)
 
-    # def drow_box(self):
-    #     for (startX, startY, endX, endY) in self._boxes_from_net:
-    #         # draw the bounding box on the image
-    #         cv2.rectangle(self.img, (startX, startY), (endX, endY), (0, 255, 0), 2)
+    def _union_boxs(self):
+
+        for key in self.boxes.clusters_boxes:
+            group = self.boxes.clusters_boxes.get(key)
+            if key == -1:
+                for (startX, startY, endX, endY) in group:
+                    self.boxes.single_regions.append(np.array([startX, startY, endX, endY]))
+                continue
+
+            startX_min = None
+            startY_min = None
+            endX_max = None
+            endY_max = None
+            count = True
+            for (startX, startY, endX, endY) in group:
+                if count is True:
+                    startX_min = startX
+                    startY_min = startY
+                    endX_max = endX
+                    endY_max = endY
+                    count = False
+
+                if startX < startX_min:
+                    startX_min = startX
+
+                if startY < startY_min:
+                    startY_min = startY
+
+                if endX > endX_max:
+                    endX_max = endX
+
+                if endY > endY_max:
+                    endY_max = endY
+
+            self.boxes.depleted_regions.append(np.array([startX_min, startY_min, endX_max, endY_max]))
+
+    def get_coordinates(self, img_path: str, min_confidence: float = 0.7, eps: int = 100, min_samples: int = 3):
+        self._load_img(img_path)
+        (scores, geometry) = self._loading_the_image_into_the_model()
+        self._results_processing(scores=scores,
+                                 geometry=geometry,
+                                 min_confidence=min_confidence)
+        self._return_to_home_coordinates()
+        self._clustering_box(eps=eps,
+                             min_samples=min_samples)
+        self._union_boxs()
+        return self.boxes
+
+    def drow_box(self, boxes):
+        for (startX, startY, endX, endY) in boxes:
+            # draw the bounding box on the image
+            cv2.rectangle(self.img, (startX, startY), (endX, endY), (0, 255, 0), 2)
 
 
 if __name__ == '__main__':
-    a = TextLocation('en_1.jpg', "frozen_east_text_detection.pb")
+    a = TextLocation("frozen_east_text_detection.pb")
     a.model_initialization()
-    a.load_img()
-    a.loading_the_image_into_the_model()
+    a.get_coordinates(img_path='exampl/3-o.jpg',
+                      min_confidence=0.55,
+                      eps=100,
+                      min_samples=2)
+    a.drow_box(a.boxes.depleted_regions)
 
-    color = {'-1': (0, 255, 0), '0': (0, 128, 128), '1': (255, 255, 0),
-             '2': (255, 69, 0), '3': (199, 21, 133), '4': ( 255, 0, 0)}
-
-    for key in a._boxes_sorted:
-        group = a._boxes_sorted.get(key)
-        
-        for (startX, startY, endX, endY) in group:
-
-            cv2.rectangle(a.img, (startX, startY), (endX, endY), (color.get(str(key))), 2)
+    # color = {'-1': (0, 255, 0), '0': (0, 128, 128), '1': (255, 255, 0),
+    #          '2': (255, 69, 0), '3': (199, 21, 133), '4': (255, 0, 0)}
+    #
+    # for key in a._boxes_sorted:
+    #     group = a._boxes_sorted.get(key)
+    #
+    #     for (startX, startY, endX, endY) in group:
+    #         cv2.rectangle(a.img, (startX, startY), (endX, endY), (color.get(str(key))), 2)
 
     cv2.imshow("Text Detection", a.img)
     path = 'B:/Data/PycharmProjects/Manga-cv/rezult'
-    cv2.imwrite(os.path.join(path, 'east_detector_colored.jpg'), a.img)
+    cv2.imwrite(os.path.join(path, 'textlocation.jpg'), a.img)
     cv2.waitKey(0)
-    print()
