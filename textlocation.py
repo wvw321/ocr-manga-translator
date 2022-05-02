@@ -16,10 +16,9 @@ class BoundingBoxes:
 
 class TextLocation:
 
-
     def __init__(self, model_path: str):
 
-        self.boxes = BoundingBoxes()
+        self.bounding_boxes = BoundingBoxes()
         self._image_to_net = None
         self.img = None
         self.model_path = model_path
@@ -122,7 +121,7 @@ class TextLocation:
         self._boxes_from_net = non_max_suppression(np.array(rects), probs=confidences)
 
     def _return_to_home_coordinates(self):
-        self.boxes.raw_box = np.empty_like(self._boxes_from_net)
+        self.bounding_boxes.raw_box = np.empty_like(self._boxes_from_net)
         counter = 0
         for (startX, startY, endX, endY) in self._boxes_from_net:
             startX = int(startX * self.__rW)
@@ -130,24 +129,24 @@ class TextLocation:
             endX = int(endX * self.__rW)
             endY = int(endY * self.__rH)
 
-            self.boxes.raw_box[counter] = (startX, startY, endX, endY)
+            self.bounding_boxes.raw_box[counter] = (startX, startY, endX, endY)
             counter += 1
 
     def _clustering_box(self, eps: int, min_samples: int, ):
-        clustered = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(self.boxes.raw_box)
+        clustered = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(self.bounding_boxes.raw_box)
 
-        for x in range(len(self.boxes.raw_box)):
+        for x in range(len(self.bounding_boxes.raw_box)):
             _class = clustered[x]
-            value = self.boxes.raw_box[x]
-            self.boxes.clusters_boxes[_class].append(value)
+            value = self.bounding_boxes.raw_box[x]
+            self.bounding_boxes.clusters_boxes[_class].append(value)
 
     def _union_boxs(self):
 
-        for key in self.boxes.clusters_boxes:
-            group = self.boxes.clusters_boxes.get(key)
+        for key in self.bounding_boxes.clusters_boxes:
+            group = self.bounding_boxes.clusters_boxes.get(key)
             if key == -1:
                 for (startX, startY, endX, endY) in group:
-                    self.boxes.single_regions.append(np.array([startX, startY, endX, endY]))
+                    self.bounding_boxes.single_regions.append(np.array([startX, startY, endX, endY]))
                 continue
 
             startX_min = None
@@ -175,7 +174,7 @@ class TextLocation:
                 if endY > endY_max:
                     endY_max = endY
 
-            self.boxes.depleted_regions.append(np.array([startX_min, startY_min, endX_max, endY_max]))
+            self.bounding_boxes.depleted_regions.append(np.array([startX_min, startY_min, endX_max, endY_max]))
 
     def get_coordinates(self, img_path: str, min_confidence: float = 0.7, eps: int = 100, min_samples: int = 3):
         self._load_img(img_path)
@@ -183,11 +182,22 @@ class TextLocation:
         self._results_processing(scores=scores,
                                  geometry=geometry,
                                  min_confidence=min_confidence)
-        self._return_to_home_coordinates()
-        self._clustering_box(eps=eps,
-                             min_samples=min_samples)
-        self._union_boxs()
-        return self.boxes
+        try:
+            self._return_to_home_coordinates()
+        except:
+            print('_return_to_home_coordinates failed!')
+
+        try:
+            self._clustering_box(eps=eps,
+                                 min_samples=min_samples)
+        except:
+            print('_clustering_box failed!')
+        try:
+            self._union_boxs()
+        except:
+            print('_union_boxs failed!')
+
+        return self.bounding_boxes
 
     def drow_box(self, boxes):
         for (startX, startY, endX, endY) in boxes:
@@ -198,11 +208,11 @@ class TextLocation:
 if __name__ == '__main__':
     a = TextLocation("frozen_east_text_detection.pb")
     a.model_initialization()
-    a.get_coordinates(img_path='exampl/3-o.jpg',
-                      min_confidence=0.55,
+    a.get_coordinates(img_path='exampl/img_10.jpg',
+                      min_confidence=0.1,
                       eps=100,
                       min_samples=2)
-    a.drow_box(a.boxes.depleted_regions)
+    a.drow_box(a.bounding_boxes.raw_box)
 
     # color = {'-1': (0, 255, 0), '0': (0, 128, 128), '1': (255, 255, 0),
     #          '2': (255, 69, 0), '3': (199, 21, 133), '4': (255, 0, 0)}
