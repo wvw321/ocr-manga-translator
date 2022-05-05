@@ -66,9 +66,11 @@ class CraftInterface:
     def net_initialization(self, trained_model: str):
 
         if self.config.cuda:
-            self.net.load_state_dict(self._copy_state_dict(torch.load(trained_model)))
+            self.net.load_state_dict(
+                    self._copy_state_dict(torch.load(trained_model)))
         else:
-            self.net.load_state_dict(self._copy_state_dict(torch.load(trained_model, map_location='cpu')))
+            self.net.load_state_dict(self._copy_state_dict(
+                    torch.load(trained_model, map_location='cpu')))
 
         if self.config.cuda:
             self.net = self.net.cuda()
@@ -81,9 +83,10 @@ class CraftInterface:
 
         image = imgproc.loadImage(image_path)
         # resize
-        img_resized, target_ratio, size_heatmap = imgproc.resize_aspect_ratio(image, self.config.canvas_size,
-                                                                              interpolation=cv2.INTER_LINEAR,
-                                                                              mag_ratio=self.config.mag_ratio)
+        img_resized, target_ratio, size_heatmap = imgproc.resize_aspect_ratio(
+                image, self.config.canvas_size,
+                interpolation=cv2.INTER_LINEAR,
+                mag_ratio=self.config.mag_ratio)
         ratio_h = ratio_w = 1 / target_ratio
 
         # preprocessing
@@ -108,15 +111,18 @@ class CraftInterface:
             score_link = y_refiner[0, :, :, 0].cpu().data.numpy()
 
         # Post-processing
-        boxes, polys = craft_utils.getDetBoxes(score_text, score_link, self.config.text_threshold,
-                                               self.config.link_threshold, self.config.low_text,
+        boxes, polys = craft_utils.getDetBoxes(score_text, score_link,
+                                               self.config.text_threshold,
+                                               self.config.link_threshold,
+                                               self.config.low_text,
                                                self.config.poly)
 
         # coordinate adjustment
         boxes = craft_utils.adjustResultCoordinates(boxes, ratio_w, ratio_h)
         polys = craft_utils.adjustResultCoordinates(polys, ratio_w, ratio_h)
         for k in range(len(polys)):
-            if polys[k] is None: polys[k] = boxes[k]
+            if polys[k] is None:
+                polys[k] = boxes[k]
 
         # render results (optional)
         render_img = score_text.copy()
@@ -165,7 +171,8 @@ class CraftInterface:
                     if y < y_min:
                         y_min = y
 
-            self.bounding_boxes.depleted_regions.append(np.array([x_min, y_min, x_max, y_max]))
+            self.bounding_boxes.depleted_regions.append(
+                    np.array([x_min, y_min, x_max, y_max]))
 
     def get_boxes(self, image_path: str, eps: int = 100, min_samples: int = 3):
         self._load_from_net(image_path)
@@ -174,15 +181,15 @@ class CraftInterface:
         return self.bounding_boxes
 
 
-def drow_polys(path: str):
-    img = cv2.imread(path)
-    for pt in polys:
-        pt = pt.astype(int)
-
-        cv2.polylines(img, [pt], True, (0, 255, 255))
-    cv2.imshow('1', img)
-    cv2.imwrite(os.path.join('result', 'textlocation.jpg'), img)
-    cv2.waitKey()
+# def drow_polys(path: str):
+#     img = cv2.imread(path)
+#     for pt in polys:
+#         pt = pt.astype(int)
+#
+#         cv2.polylines(img, [pt], True, (0, 255, 255))
+#     cv2.imshow('1', img)
+#     cv2.imwrite(os.path.join('result', 'textlocation.jpg'), img)
+#     cv2.waitKey()
 
 
 def drow_box(path: str, boxes, name: str = 'result'):
@@ -198,9 +205,12 @@ def drow_box(path: str, boxes, name: str = 'result'):
 
 
 if __name__ == '__main__':
-    image_path = 'B:\Data\git\CRAFT-pytorch\exampl\en_1.jpg'
+    image_path = 'B:/Data/git/CRAFT-pytorch/exampl/en_1.jpg'
     net = CraftInterface()
-    net.net_initialization(trained_model='B:\Data\git\ocr-manga-translator/net\craft_ic15_20k.pth')
+    net.net_initialization(
+            trained_model=
+            'B:/Data/git/ocr-manga-translator/net/craft_ic15_20k.pth'
+    )
     net.get_boxes(image_path=image_path, eps=80)
     # drow_box(path=image_path,
     #          boxes=net.bounding_boxes.single_regions,
@@ -208,6 +218,3 @@ if __name__ == '__main__':
     drow_box(path=image_path,
              boxes=net.bounding_boxes.depleted_regions,
              name='2')
-
-
-

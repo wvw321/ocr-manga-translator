@@ -1,4 +1,4 @@
-class ImageHandler():
+class ImageHandler:
 
     def __init__(self, links: list = None):
         if type(links) != list:
