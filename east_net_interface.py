@@ -1,5 +1,6 @@
 import os
 from collections import defaultdict
+from dataclasses import dataclass
 
 import cv2
 import numpy as np
@@ -7,12 +8,12 @@ from imutils.object_detection import non_max_suppression
 from sklearn.cluster import DBSCAN
 
 
+@dataclass
 class BoundingBoxes:
-    def __init__(self):
-        self.raw_box = None
-        self.clusters_boxes = defaultdict(list)
-        self.depleted_regions = list()
-        self.single_regions = list()
+    raw_box = None
+    clusters_boxes = defaultdict(list)
+    depleted_regions = list()
+    single_regions = list()
 
 
 class TextLocation:
@@ -189,13 +190,12 @@ class TextLocation:
                     np.array([start_x_min, start_y_min, end_x_max, end_y_max])
             )
 
-    def get_coordinates(
-            self,
-            img_path: str,
-            min_confidence: float = 0.7,
-            eps: int = 100,
-            min_samples: int = 3,
-    ):
+    def get_coordinates(self, img_path: str,
+                        min_confidence: float = 0.7,
+                        eps: int = 100,
+                        min_samples: int = 3,
+                        ):
+
         self._load_img(img_path)
         (scores, geometry) = self._loading_the_image_into_the_model()
         self._results_processing(scores=scores,
