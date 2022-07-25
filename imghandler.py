@@ -4,13 +4,11 @@ from collections import defaultdict
 
 import cv2
 import easyocr
+from PIL import ImageDraw, Image
 from sklearn.cluster import DBSCAN
 
-from craft_net_interface import CraftInterface
+from config import IMG_PATH
 from db_yaml import DBYaml
-from config import IMAGE_DIRECTORY
-
-from PIL import ImageDraw, Image
 
 
 class ImageHandler:
@@ -18,13 +16,12 @@ class ImageHandler:
     def __init__(self,
                  image_directory: str = None,
                  ):
-
-        if isinstance(image_directory, str) is False:
-            raise ValueError
+        if image_directory is not None:
+            if isinstance(image_directory, str) is False:
+                raise ValueError
 
         self.image_directory = image_directory
         self.img_names: list
-        self.text_detector_model_craft_net = CraftInterface()
 
     @staticmethod
     def cut_text_boxes(path_yaml: str, path_img: str):
@@ -57,17 +54,17 @@ class ImageHandler:
         else:
             print("не верная директория ")
 
-    def get_text_box(self, path_img: str = None):
+    def get_text_box(self, path_img: str = None, single_regions: bool = False):
         reader = easyocr.Reader(['en'])
 
-        conf_DBSCAN = {'eps'        : 110,
+        conf_DBSCAN = {'eps': 110,
                        'min_samples': 2}
 
         conf_craftNet = {"text_threshold": 0.6,
                          "link_threshold": 0.3,
-                         "canvas_size"   : 1280,
-                         "mag_ratio"     : 1.5,
-                         "low_text"      : 0.4,
+                         "canvas_size": 1280,
+                         "mag_ratio": 1.5,
+                         "low_text": 0.4,
                          }
 
         def _get_text_box_easyocr(img_path: str):
@@ -94,6 +91,10 @@ class ImageHandler:
                 for key in clusters_boxes:
 
                     if key == -1:
+                        if single_regions is True:
+                            group = clusters_boxes.get(key)
+                            depleted_regions.append(group)
+                            continue
                         continue
 
                     group = clusters_boxes.get(key)
@@ -119,7 +120,7 @@ class ImageHandler:
             if depleted_regions is not None and len(depleted_regions) != 0:
                 DBYaml.damp.text_box(boxes=depleted_regions,
                                      path=DBYaml.from_image_path_to_yaml_path(
-                                             img_path))
+                                         img_path))
 
         if path_img is not None:
             _get_text_box_easyocr(img_path=path_img)
@@ -154,8 +155,8 @@ class ImageHandler:
         def _get_text():
             path_yaml = DBYaml.from_image_path_to_yaml_path(path_img)
             circumcised = ImageHandler.cut_text_boxes(
-                    path_yaml=path_yaml,
-                    path_img=path_img)
+                path_yaml=path_yaml,
+                path_img=path_img)
 
             if circumcised is not False:
                 text = easy_ocr_get_text(circumcised)
@@ -191,7 +192,7 @@ class ImageHandler:
         image = Image.open(img_path)
         draw = ImageDraw.Draw(image)
         boxes = DBYaml.load.text_box(
-                DBYaml.from_image_path_to_yaml_path(img_path))
+            DBYaml.from_image_path_to_yaml_path(img_path))
 
         for key in boxes:
             bound = boxes.get(key)
@@ -203,12 +204,10 @@ class ImageHandler:
 
 if __name__ == '__main__':
     start_time = time.time()
-    img_path = "example/4.jpg"
-    # ImageHandler.draw_box(img_path)
-
-    test = ImageHandler(image_directory=IMAGE_DIRECTORY)
-    test.get_text_box()
-    test.get_text()
-
+    img_path = IMG_PATH
+    test = ImageHandler()
+    test.get_text_box(img_path)
+    test.get_text(img_path)
+    ImageHandler.draw_box(img_path)
     print("--- %s seconds ---" % (time.time() - start_time))
     # ImageHandler.draw_box(img_path)
