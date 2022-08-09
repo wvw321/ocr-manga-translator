@@ -4,6 +4,7 @@ from numpy import ndarray
 
 
 class DBYaml:
+
     @staticmethod
     def _checking_exceptions(str_value: str, list_value: list):
 
@@ -25,9 +26,12 @@ class DBYaml:
             with open(path, "w") as fl:
                 yaml.dump(data, fl,
                           default_flow_style=False)
+
         else:
             with open(path, "w") as fl:
-                yaml.dump({key: data}, fl,
+                data_ = dict()
+                data_[key] = data
+                yaml.dump(data_, fl,
                           default_flow_style=False)
 
     @staticmethod
@@ -55,10 +59,29 @@ class DBYaml:
         def __init__(self, path: str, data, kay: str = None):
             DBYaml._damp_yaml(path=path, key=kay, data=data)
 
+
         @staticmethod
         def _dict_create(dates):
+
             count = 1
             _dict_text_box = {}
+            if isinstance(dates, dict):
+
+                for kay in dates:
+
+                    data_list = list()
+                    for data in dates[kay]:
+                        values_list = list()
+                        for Values in data:
+                            values_list.append(int(Values))
+                        data_list.append(values_list)
+                    if kay == -1:
+
+                        _dict_text_box['solo'] = data_list
+                    else:
+                        _dict_text_box[kay + 1] = data_list
+                return _dict_text_box
+
             for data in dates:
                 if isinstance(data, ndarray):
                     _dict_text_box[str(count)] = data.tolist()
@@ -67,13 +90,13 @@ class DBYaml:
                 if isinstance(data, list) or isinstance(data, str):
                     _dict_text_box[str(count)] = data
                     count += 1
+
             return _dict_text_box
 
         @staticmethod
-        def text_box(path: str, boxes: list):
-            DBYaml._checking_exceptions(str_value=path, list_value=boxes)
-            key = "boxes_group"
-            dict_data = DBYaml.damp._dict_create(boxes)
+        def _dump(key: str, path: str, list_value: list or dict):
+            # DBYaml._checking_exceptions(str_value=path, list_value=list_value)
+            dict_data = DBYaml.damp._dict_create(list_value)
             if os.path.exists(path):
                 DBYaml._overwriting_yaml(key=key,
                                          dict_data=dict_data,
@@ -84,19 +107,23 @@ class DBYaml:
                                   key=key)
 
         @staticmethod
+        def text_box(path: str, boxes: list):
+            key = "boxes_group"
+            DBYaml.damp._dump(path=path, list_value=boxes, key=key)
+
+
+        @staticmethod
+        def word_box(path: str, boxes: dict):
+            key = "word_box"
+            DBYaml.damp._dump(path=path, list_value=boxes, key=key)
+
+        @staticmethod
         def text(path: str, text_list: list):
-            DBYaml._checking_exceptions(str_value=path, list_value=text_list)
+
             key = "text"
-            dict_data = DBYaml.damp._dict_create(text_list)
-            if os.path.exists(path):
-                DBYaml._overwriting_yaml(path=path,
-                                         key=key,
-                                         dict_data=dict_data,
-                                         )
-            else:
-                DBYaml._damp_yaml(path=path,
-                                  key=key,
-                                  data=dict_data)
+            DBYaml.damp._dump(path=path, list_value=text_list, key=key)
+
+
 
     class load:
         def __init__(self, path_yaml: str):
@@ -123,8 +150,11 @@ class DBYaml:
             text = DBYaml.load._load("text", path_yaml)
             return text
 
+        @staticmethod
+        def word_box(path_yaml: str):
+            text = DBYaml.load._load("word_box", path_yaml)
+            return text
+
 
 if __name__ == '__main__':
-    a = DBYaml.load.text_box(path_yaml="example/4.yaml")
-    b = DBYaml.load.text(path_yaml="example/4.yaml")
-    print(a, b)
+    pass
