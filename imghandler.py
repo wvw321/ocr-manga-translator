@@ -1,14 +1,13 @@
 import os.path
 import time
 from collections import defaultdict
-
+from EasyLaMa import TextRemover
 import cv2
 import easyocr
 import numpy as np
 from PIL import ImageDraw, Image
 from sklearn.cluster import DBSCAN
 
-from config import IMG_PATH
 from db_yaml import DBYaml
 
 
@@ -98,38 +97,55 @@ class ImageHandler:
 
         return image.show()
 
+    # @staticmethod
+    # def image_cleanup(path_img: str, save_dir: str = None, method: str = "box"):
+    #     img = cv2.imread(path_img)
+    #     h, w, _ = img.shape
+    #     mask = np.zeros([h, w], np.uint8)
+    #     color = 255
+    #     thickness = -1
+    #
+    #     def _show():
+    #         # dst1 = cv2.inpaint(img, mask, 10, cv2.INPAINT_NS)
+    #         # dst = cv2.inpaint(img, mask, 10, cv2.INPAINT_TELEA)
+    #         Tr = TextRemover(device="cpu", easyocr=False).inpaint(Image.fromarray(img), mask)
+    #         Tr.show()
+    #         Image.fromarray(mask).show()
+    #         #
+    #         # Image.fromarray(dst1).show()
+    #
+    #     if method == "box":
+    #         boxes = DBYaml.load.text_box(DBYaml.from_image_path_to_yaml_path(img_path))
+    #         for key in boxes:
+    #             x0, y0, x1, y1 = boxes.get(key)
+    #             mask = cv2.rectangle(mask, [x0, y0], [x1, y1], color, thickness)
+    #         _show()
+    #
+    #     if method == "word":
+    #         boxes = DBYaml.load.word_box(DBYaml.from_image_path_to_yaml_path(img_path))
+    #         for key in boxes:
+    #             bound = boxes.get(key)
+    #             for x0, y0, x1, y1 in bound:
+    #                 mask = cv2.rectangle(mask, [x0, y0], [x1, y1], color, thickness)
+    #         _show()
+
     @staticmethod
-    def create_mask(path_img: str, save_dir: str = None, metod: str = "box"):
-        img = cv2.imread(path_img)
-        h, w, _ = img.shape
-        mask = np.zeros([h, w], np.uint8)
-        color = (255)
-        thickness = -1
+    def image_cleanup(path_img: str, mask_edge: int = 15, radius=1):
+        image = Image.open(path_img)
+        mask = Image.new(mode="L", size=image.size)
+        draw = ImageDraw.Draw(mask)
+        boxes = DBYaml.load.word_box(DBYaml.from_image_path_to_yaml_path(img_path))
 
-        def _show():
-            dst = cv2.inpaint(img, mask, 3, cv2.INPAINT_NS)
-            cv2.imshow("dst", dst)
-            cv2.imshow("mask", mask)
-            cv2.waitKey()
+        for key in boxes:
+            bound = boxes.get(key)
+            for box in bound:
+                box = [coordinate - mask_edge for coordinate in box[:2]] + [coordinate + mask_edge for coordinate in
+                                                                            box[2:]]
+                draw.rounded_rectangle(xy=box, fill=255, outline=255, width=1, radius=radius)
+        mask.show()
 
-        if metod == "box":
-            boxes = DBYaml.load.text_box(
-                DBYaml.from_image_path_to_yaml_path(img_path))
-            for key in boxes:
-                x0, y0, x1, y1 = boxes.get(key)
-                mask = cv2.rectangle(mask, [x0, y0], [x1, y1], color, thickness)
-            _show()
-
-        if metod == "word":
-            boxes = DBYaml.load.word_box(
-                DBYaml.from_image_path_to_yaml_path(img_path))
-            for key in boxes:
-                bound = boxes.get(key)
-                for x0, y0, x1, y1 in bound:
-                    mask = cv2.rectangle(mask, [x0, y0], [x1, y1], color, thickness)
-            _show()
-
-
+        Tr = TextRemover(device="cpu", easyocr=False).inpaint(image, mask)
+        Tr.show()
 
     def _links_loader(self):
         #  является ли путь директорией.
@@ -147,20 +163,20 @@ class ImageHandler:
     def get_text_box(self, path_img: str = None, single_regions: bool = False):
         reader = easyocr.Reader(['en'])
 
-        conf_DBSCAN = {'eps': 105,
+        conf_DBSCAN = {'eps': 150,
                        'min_samples': 2}
 
         conf_craftNet = {"min_size": 10,  # текстовое поле фильтра меньше минимального значения в пикселях
-                         "text_threshold": 0.4,  # порог достоверности текста
+                         "text_threshold": 0.6,  # порог достоверности текста
                          "low_text": 0.4,  # нижняя граница текста
                          "link_threshold": 0.3,  # порог достоверности ссылки
-                         "canvas_size": 2000,  # максимальный размер изображения
+                         "canvas_size": 2500,  # максимальный размер изображения
                          "mag_ratio": 1.5,  # коэффициент увеличения изображения
                          "slope_ths": 0.1,  # максимальный наклон
                          "ycenter_ths": 0.5,  # максимальное смещение в направлении y
                          "height_ths": 0.5,  # Максимальная разница в высоте блока
                          "width_ths": 0.5,  # максимальное расстояние по горизонтали для объединения блоков
-                         "add_margin": 0.05,  # расширить ограничивающие  на определенное значение
+                         "add_margin": 0,  # расширить ограничивающие  на определенное значение
                          }
 
         def _get_text_box_easyocr(img_path: str):
@@ -174,11 +190,7 @@ class ImageHandler:
                 img = cv2.imread(img_path)
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 _, thresh = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                # # cv2.imshow("gray", thresh)
-                # # cv2.waitKey()
                 box_list = reader.detect(thresh, **conf_craftNet)
-
-                # box_list = reader.detect(img_path, **conf_craftNet)
                 box_list = box_list[0][0]
 
             def _clustered_text_box():
@@ -246,28 +258,38 @@ class ImageHandler:
 
         def _preprocessing_img(img):
 
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            def _resize(image, scale_percent: int = 500):
 
-            resize = cv2.resize(gray, [300, 300], cv2.INTER_CUBIC)
-            ret, thresh = cv2.threshold(resize, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                width, height = gray.shape
+                if height >= scale_percent or width >= scale_percent:
+                    resize = image
+                else:
+                    height_scale_percent = int(round(scale_percent / height))
+                    width_scale_percent = int(round(scale_percent / width))
+                    if width_scale_percent >= height_scale_percent:
+                        dsize = [(height * height_scale_percent), (width * height_scale_percent)]
+
+                        resize = cv2.resize(image, dsize, cv2.INTER_CUBIC)
+                    else:
+                        dsize = [(height * width_scale_percent), (width * width_scale_percent)]
+                        resize = cv2.resize(image, dsize, cv2.INTER_CUBIC)
+                return resize
+
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            resize_gray = _resize(gray)
+            median = cv2.medianBlur(resize_gray, 5)
+            _, thresh = cv2.threshold(median, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
             black, white = cv2.calcHist([thresh], [0], None, [2], [0, 256])
             if white > black:
-
-                # ret, thresh1 = cv2.threshold(thresh1, 127, 255, cv2.THRESH_BINARY)
-                # kernel = np.ones((3, 3), np.uint8)
-                # closing = cv2.morphologyEx(thresh1, cv2.MORPH_CLOSE, kernel, iterations=1)
-
                 cv2.imshow("gray", gray)
                 cv2.imshow("thresh", thresh)
-                # cv2.imshow("closing", closing)
                 cv2.waitKey()
                 img = thresh
             else:
-                median = cv2.medianBlur(resize, 5)
-                ret, thresh = cv2.threshold(median, 50, 255, cv2.THRESH_BINARY)
-                cv2.imshow("thresh", thresh)
+                _, thresh_trunc = cv2.threshold(median, 127, 255, cv2.THRESH_TRUNC)
+                cv2.imshow("thresh", thresh_trunc)
                 cv2.waitKey()
-                img = thresh
+                img = thresh_trunc
 
             return img
 
@@ -321,12 +343,13 @@ if __name__ == '__main__':
     start_time = time.time()
     # img_path = IMG_PATH
     img_path = "example/3.jpg"
-    test = ImageHandler()
-    test.get_text_box(img_path)
+    # test = ImageHandler()
+    # test.get_text_box(img_path)
     # test.get_text(img_path)
     # ImageHandler.draw_box(img_path)
-    ImageHandler.draw_word_box(img_path)
+    # ImageHandler.draw_word_box(img_path)
     # ImageHandler.cut_text_boxes(img_path, "example")
-    ImageHandler.create_mask(img_path, metod='word')
+    # ImageHandler.image_cleanup(img_path, method="word")
+    ImageHandler.image_cleanup(img_path)
 
-print("--- %s seconds ---" % (time.time() - start_time))
+    print("--- %s seconds ---" % (time.time() - start_time))
