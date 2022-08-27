@@ -59,7 +59,6 @@ class DBYaml:
         def __init__(self, path: str, data, kay: str = None):
             DBYaml._damp_yaml(path=path, key=kay, data=data)
 
-
         @staticmethod
         def _dict_create(dates):
 
@@ -111,7 +110,6 @@ class DBYaml:
             key = "boxes_group"
             DBYaml.damp._dump(path=path, list_value=boxes, key=key)
 
-
         @staticmethod
         def word_box(path: str, boxes: dict):
             key = "word_box"
@@ -122,8 +120,6 @@ class DBYaml:
 
             key = "text"
             DBYaml.damp._dump(path=path, list_value=text_list, key=key)
-
-
 
     class load:
         def __init__(self, path_yaml: str):

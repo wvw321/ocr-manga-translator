@@ -15,6 +15,7 @@ LAMA_MODEL_URL = os.environ.get(
     "https://github.com/Sanster/models/releases/download/add_big_lama/big-lama.pt",
 )
 
+
 def download_model(url=LAMA_MODEL_URL):
     '''from https://github.com/Sanster/lama-cleaner/blob/main/lama_cleaner/helper.py'''
     parts = urlparse(url)
@@ -30,10 +31,12 @@ def download_model(url=LAMA_MODEL_URL):
         download_url_to_file(url, cached_file, hash_prefix, progress=True)
     return cached_file
 
+
 @torch.inference_mode()
 def image_to_tensor(image, device="cpu"):
     image = to_tensor(image).to(device).to(torch.float)
     return image
+
 
 def load_image(image):
     if isinstance(image, (str, os.PathLike)):
@@ -48,8 +51,10 @@ def load_image(image):
                 raise e
     return image.convert("RGB")
 
+
 def load_images(images):
     return [load_image(image) for image in images]
+
 
 @torch.inference_mode()
 def pad(tensor, mod, **kwargs):
@@ -63,15 +68,16 @@ def pad(tensor, mod, **kwargs):
         ow = w
     else:
         ow = (w // mod + 1) * mod
-    
-    pad_tensor = transforms.Pad(padding=(0, 0, ow-w,  oh-h), **kwargs)
+
+    pad_tensor = transforms.Pad(padding=(0, 0, ow - w, oh - h), **kwargs)
     padded = pad_tensor(tensor)
     return padded
+
 
 class Timer:
     def __enter__(self):
         self.start = time()
-    
+
     def __exit__(self, *args, **kwargs):
-        self.time = time() - self.start 
+        self.time = time() - self.start
         print(self.time)
